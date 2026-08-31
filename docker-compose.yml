@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: headerssentinel-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./scan_history.db
+      - BACKEND_CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./backend:/app
+      - backend_data:/app
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - headerssentinel
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: headerssentinel-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - headerssentinel
+    command: npm run dev
+
+volumes:
+  backend_data:
+
+networks:
+  headerssentinel:
+    driver: bridge
