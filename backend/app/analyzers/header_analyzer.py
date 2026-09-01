@@ -1,6 +1,6 @@
-"""Core header analyzer logic."""
+﻿"""Core header analyzer and industry-standard security scoring engine."""
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from app.schemas import Finding, SeverityCount
 
@@ -9,18 +9,10 @@ class HeaderAnalyzer:
     """Main analyzer for HTTP security headers."""
     
     def __init__(self, headers: Dict[str, str]):
-        """Initialize with response headers."""
-        self.headers = {k.lower(): v for k, v in headers.items()}  # Normalize keys
+        self.headers = {k.lower(): str(v) for k, v in headers.items()}
         self.findings: List[Finding] = []
     
-    def analyze(self) -> tuple[List[Finding], SeverityCount, float]:
-        """
-        Analyze all security headers.
-        
-        Returns:
-            Tuple of (findings, severity_counts, security_score)
-        """
-        # Import analyzers
+    def analyze(self) -> Tuple[List[Finding], SeverityCount, float]:
         from app.analyzers.csp_analyzer import analyze_csp
         from app.analyzers.hsts_analyzer import analyze_hsts
         from app.analyzers.cors_analyzer import analyze_cors
@@ -42,18 +34,13 @@ class HeaderAnalyzer:
         self.findings.extend(analyze_referrer_policy(self.headers))
         self.findings.extend(analyze_permissions_policy(self.headers))
         
-        # Calculate severity counts
         severity_counts = self._calculate_severity_counts()
-        
-        # Calculate security score
-        security_score = self._calculate_security_score(severity_counts)
+        security_score = self._calculate_security_score()
         
         return self.findings, severity_counts, security_score
     
     def _calculate_severity_counts(self) -> SeverityCount:
-        """Count findings by severity."""
         counts = SeverityCount()
-        
         for finding in self.findings:
             if finding.severity == "CRITICAL":
                 counts.CRITICAL += 1
@@ -65,49 +52,66 @@ class HeaderAnalyzer:
                 counts.LOW += 1
             elif finding.severity == "INFO":
                 counts.INFO += 1
-        
         return counts
     
-    def _calculate_security_score(self, severity_counts: SeverityCount) -> float:
+    def _calculate_security_score(self) -> float:
         """
-        Calculate security score from 0-100.
-        
-        Deductions:
-        - Critical: 25 points
-        - High: 15 points
-        - Medium: 7 points
-        - Low: 2 points
-        - Info: 0 points
+        Industry-standard weighted scoring model (0-100):
+        - HSTS: 25 pts
+        - CSP: 25 pts
+        - X-Frame-Options: 15 pts
+        - X-Content-Type-Options: 15 pts
+        - Referrer-Policy: 10 pts
+        - Permissions-Policy: 10 pts
         """
-        base_score = 100.0
+        score = 0.0
         
-        deductions = {
-            "CRITICAL": 25,
-            "HIGH": 15,
-            "MEDIUM": 7,
-            "LOW": 2,
-            "INFO": 0,
-        }
+        # 1. HSTS (25 points)
+        if "strict-transport-security" in self.headers:
+            hsts_val = self.headers["strict-transport-security"].lower()
+            if "max-age" in hsts_val:
+                score += 15.0
+                if "includesubdomains" in hsts_val:
+                    score += 5.0
+                if "preload" in hsts_val:
+                    score += 5.0
         
-        total_deduction = (
-            severity_counts.CRITICAL * deductions["CRITICAL"] +
-            severity_counts.HIGH * deductions["HIGH"] +
-            severity_counts.MEDIUM * deductions["MEDIUM"] +
-            severity_counts.LOW * deductions["LOW"] +
-            severity_counts.INFO * deductions["INFO"]
-        )
+        # 2. CSP (25 points)
+        csp = self.headers.get("content-security-policy") or self.headers.get("content-security-policy-report-only")
+        if csp:
+            csp_lower = csp.lower()
+            score += 15.0
+            if "'unsafe-inline'" not in csp_lower:
+                score += 5.0
+            if "'unsafe-eval'" not in csp_lower:
+                score += 5.0
         
-        score = max(0, min(100, base_score - total_deduction))
-        return round(score, 2)
-    
-    def get_findings(self) -> List[Finding]:
-        """Get all findings."""
-        return self.findings
-    
-    def get_header(self, name: str) -> Optional[str]:
-        """Get header value case-insensitively."""
-        return self.headers.get(name.lower())
-    
-    def has_header(self, name: str) -> bool:
-        """Check if header exists case-insensitively."""
-        return name.lower() in self.headers
+        # 3. X-Frame-Options / CSP frame-ancestors (15 points)
+        xfo = self.headers.get("x-frame-options", "").lower()
+        if xfo in ("deny", "sameorigin") or (csp and "frame-ancestors" in csp.lower()):
+            score += 15.0
+        elif xfo:
+            score += 8.0
+            
+        # 4. X-Content-Type-Options (15 points)
+        if self.headers.get("x-content-type-options", "").strip().lower() == "nosniff":
+            score += 15.0
+            
+        # 5. Referrer-Policy (10 points)
+        ref_pol = self.headers.get("referrer-policy", "").strip().lower()
+        if ref_pol in ("strict-origin-when-cross-origin", "no-referrer", "same-origin", "strict-origin"):
+            score += 10.0
+        elif ref_pol and ref_pol != "unsafe-url":
+            score += 6.0
+            
+        # 6. Permissions-Policy / Feature-Policy (10 points)
+        if "permissions-policy" in self.headers or "feature-policy" in self.headers:
+            score += 10.0
+            
+        # Penalties for critical misconfigurations
+        cors_origin = self.headers.get("access-control-allow-origin", "")
+        cors_creds = self.headers.get("access-control-allow-credentials", "").lower()
+        if cors_origin == "*" and cors_creds == "true":
+            score = max(0.0, score - 30.0)
+            
+        return round(max(0.0, min(100.0, score)), 1)
