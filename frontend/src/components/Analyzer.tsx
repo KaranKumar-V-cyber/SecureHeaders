@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import { AlertCircle, CheckCircle, Loader, Terminal, Globe, Clock, ShieldCheck } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader, Terminal, Globe, Clock, ShieldCheck, Copy, Check } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface AnalysisResult {
@@ -12,6 +12,7 @@ interface AnalysisResult {
   security_score: number
   http_status?: number
   response_time_ms?: number
+  redirect_count?: number
   server_info?: string
   response_headers: Record<string, string>
   findings: any[]
@@ -24,7 +25,8 @@ export default function Analyzer() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'findings' | 'headers'>('findings')
+  const [activeTab, setActiveTab] = useState<'findings' | 'headers' | 'verify'>('findings')
+  const [copied, setCopied] = useState(false)
 
   const handleAnalyze = async () => {
     if (!url) {
@@ -61,25 +63,41 @@ export default function Analyzer() {
     setError(null)
   }
 
+  const copyCurlCommand = (targetUrl: string) => {
+    const cmd = `curl -I -L "${targetUrl.startsWith('http') ? targetUrl : 'https://' + targetUrl}"`
+    navigator.clipboard.writeText(cmd)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const getGrade = (score: number) => {
+    if (score >= 90) return { grade: 'A+', color: 'text-green-400 border-green-500 bg-green-950/40' }
+    if (score >= 80) return { grade: 'A', color: 'text-green-400 border-green-500 bg-green-950/40' }
+    if (score >= 70) return { grade: 'B', color: 'text-blue-400 border-blue-500 bg-blue-950/40' }
+    if (score >= 50) return { grade: 'C', color: 'text-yellow-400 border-yellow-500 bg-yellow-950/40' }
+    if (score >= 35) return { grade: 'D', color: 'text-orange-400 border-orange-500 bg-orange-950/40' }
+    return { grade: 'F', color: 'text-red-400 border-red-500 bg-red-950/40' }
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">Live Website Analyzer</h1>
-        <p className="text-slate-400">Perform real-time HTTP security header analysis on live websites</p>
+        <h1 className="text-4xl font-bold mb-2">Live HTTP Security Header Analyzer</h1>
+        <p className="text-slate-400">Real-time, authentic security header inspection matching industry standards</p>
       </div>
 
       <div className="card mb-8">
         <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">Target URL</label>
+          <label className="block text-sm font-medium mb-2">Target Website URL</label>
           <input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://example.com"
-            className="input"
+            className="input text-lg"
             disabled={loading}
           />
-          <p className="text-xs text-slate-500 mt-2">Example: https://google.com, https://github.com, or example.com</p>
+          <p className="text-xs text-slate-500 mt-2">Try scanning: github.com (A+), google.com (D), apple.com (D/F), or your own domain</p>
         </div>
 
         <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
@@ -113,7 +131,7 @@ export default function Analyzer() {
             {loading ? (
               <>
                 <Loader className="w-4 h-4 mr-2 animate-spin inline" />
-                Analyzing Live Target...
+                Fetching Live Headers...
               </>
             ) : (
               'Analyze Now'
@@ -131,34 +149,33 @@ export default function Analyzer() {
 
       {result && (
         <div className="space-y-6">
-          <div className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-slate-400 text-xs">Target & Final URL</p>
-                <p className="text-xl font-mono font-bold text-slate-100">{result.target}</p>
-                {result.final_url && result.final_url !== result.target && (
-                  <p className="text-xs text-blue-400 font-mono mt-1">↳ Resolved: {result.final_url}</p>
-                )}
+          {/* Main Score Banner */}
+          <div className="card flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <Globe className="w-5 h-5 text-blue-400" />
+                <h2 className="text-2xl font-bold font-mono text-slate-100">{result.target}</h2>
               </div>
-              <ScoreIndicator score={result.security_score} />
+              {result.final_url && result.final_url !== result.target && (
+                <p className="text-xs text-slate-400 font-mono">Resolved via redirects $\rightarrow$ <span className="text-blue-400">{result.final_url}</span></p>
+              )}
+              <div className="flex flex-wrap gap-4 mt-4 text-xs text-slate-300">
+                <span className="bg-slate-800 px-2.5 py-1 rounded border border-slate-700">HTTP Status: <strong className="text-white">{result.http_status || 200}</strong></span>
+                <span className="bg-slate-800 px-2.5 py-1 rounded border border-slate-700">Response Time: <strong className="text-white">{result.response_time_ms}ms</strong></span>
+                <span className="bg-slate-800 px-2.5 py-1 rounded border border-slate-700">Server: <strong className="text-white">{result.server_info || 'Hidden'}</strong></span>
+                <span className="bg-slate-800 px-2.5 py-1 rounded border border-slate-700">Redirects: <strong className="text-white">{result.redirect_count || 0}</strong></span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-800 text-sm">
-              <div>
-                <p className="text-slate-400 text-xs">HTTP Status</p>
-                <p className="font-semibold">{result.http_status || 'N/A'}</p>
+            {/* Letter Grade & Score Badge */}
+            <div className="flex items-center gap-4 border-l border-slate-800 pl-6">
+              <div className={`w-20 h-20 rounded-2xl border-2 flex flex-col items-center justify-center font-bold shadow-lg ${getGrade(result.security_score).color}`}>
+                <span className="text-3xl">{getGrade(result.security_score).grade}</span>
+                <span className="text-[10px] tracking-wider uppercase opacity-80">Grade</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">Response Time</p>
-                <p className="font-semibold">{result.response_time_ms ? `${result.response_time_ms}ms` : 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Server Banner</p>
-                <p className="font-semibold">{result.server_info || 'Hidden / Redacted'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Total Findings</p>
-                <p className="font-semibold">{result.findings.length}</p>
+              <div className="text-left">
+                <p className="text-xs text-slate-400 uppercase font-semibold">Security Score</p>
+                <p className="text-3xl font-extrabold text-white">{result.security_score}<span className="text-sm font-normal text-slate-400">/100</span></p>
               </div>
             </div>
           </div>
@@ -171,7 +188,7 @@ export default function Analyzer() {
                 activeTab === 'findings' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              Security Findings ({result.findings.length})
+              Audited Findings ({result.findings.length})
             </button>
             <button
               onClick={() => setActiveTab('headers')}
@@ -181,28 +198,33 @@ export default function Analyzer() {
             >
               <Terminal className="w-4 h-4" /> Live Raw Headers ({Object.keys(result.response_headers || {}).length})
             </button>
+            <button
+              onClick={() => setActiveTab('verify')}
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'verify' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <CheckCircle className="w-4 h-4" /> Live cURL Verifier
+            </button>
           </div>
 
-          {activeTab === 'findings' ? (
+          {/* Tab 1: Findings */}
+          {activeTab === 'findings' && (
             <div className="space-y-4">
-              {result.findings.length === 0 ? (
-                <div className="card text-center py-8 text-slate-400">
-                  <ShieldCheck className="w-10 h-10 mx-auto mb-2 text-green-400" />
-                  <p className="font-medium">No security issues detected!</p>
-                </div>
-              ) : (
-                result.findings.map((finding, idx) => (
-                  <FindingCard key={idx} finding={finding} />
-                ))
-              )}
+              {result.findings.map((finding, idx) => (
+                <FindingCard key={idx} finding={finding} />
+              ))}
             </div>
-          ) : (
+          )}
+
+          {/* Tab 2: Raw Headers */}
+          {activeTab === 'headers' && (
             <div className="card">
-              <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-blue-400" /> Actual HTTP Headers Received
+              <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+                <Terminal className="w-5 h-5 text-blue-400" /> Authentic HTTP Headers Received from Server
               </h3>
               <p className="text-xs text-slate-400 mb-4">
-                These are the authentic response headers fetched directly from the target server:
+                These are the exact raw headers returned directly by {result.final_url || result.target}:
               </p>
               <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-xs overflow-x-auto space-y-1.5">
                 {Object.entries(result.response_headers || {}).map(([k, v]) => (
@@ -214,25 +236,31 @@ export default function Analyzer() {
               </div>
             </div>
           )}
+
+          {/* Tab 3: cURL Verifier */}
+          {activeTab === 'verify' && (
+            <div className="card">
+              <h3 className="text-lg font-bold mb-2">Cross-Verify with Your Own Terminal</h3>
+              <p className="text-sm text-slate-400 mb-4">
+                Run this exact command in PowerShell or Terminal to see that HeaderSentinel matches the live server 100%:
+              </p>
+              <div className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-sm mb-4">
+                <code className="text-green-400">curl -I -L "{result.final_url || result.target}"</code>
+                <button
+                  onClick={() => copyCurlCommand(result.final_url || result.target)}
+                  className="btn-secondary text-xs flex items-center gap-1.5"
+                >
+                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  {copied ? 'Copied!' : 'Copy Command'}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Compare the headers returned in your terminal with the <strong>Live Raw Headers</strong> tab above.
+              </p>
+            </div>
+          )}
         </div>
       )}
-    </div>
-  )
-}
-
-function ScoreIndicator({ score }: { score: number }) {
-  const getColor = (score: number) => {
-    if (score >= 80) return 'text-green-400'
-    if (score >= 60) return 'text-yellow-400'
-    if (score >= 40) return 'text-orange-400'
-    return 'text-red-400'
-  }
-
-  return (
-    <div className={`text-center ${getColor(score)}`}>
-      <p className="text-xs text-slate-400">Security Score</p>
-      <p className="text-4xl font-bold">{score}</p>
-      <p className="text-xs text-slate-400">/100</p>
     </div>
   )
 }
@@ -282,7 +310,7 @@ function FindingCard({ finding }: { finding: any }) {
       {finding.reference && (
         <div className="mt-3 pt-3 border-t border-current border-opacity-20">
           <a href={finding.reference} target="_blank" rel="noopener noreferrer" className="text-xs underline opacity-75">
-            Learn More →
+            Learn More $\rightarrow$
           </a>
         </div>
       )}

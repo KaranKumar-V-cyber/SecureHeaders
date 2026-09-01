@@ -1,10 +1,10 @@
-﻿"""Scan service for analyzing websites."""
+﻿"""Scan service for analyzing live websites with full transparency."""
 
 import asyncio
 import httpx
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from urllib.parse import urlparse
 from sqlalchemy.orm import Session
 
@@ -139,13 +139,17 @@ class ScanService:
             req_headers = {
                 "User-Agent": BROWSER_USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
                 "Sec-Fetch-User": "?1",
                 "Upgrade-Insecure-Requests": "1"
             }
+            
             async with httpx.AsyncClient(
                 follow_redirects=True,
                 max_redirects=settings.ssrf_max_redirects,
@@ -154,6 +158,7 @@ class ScanService:
             ) as client:
                 response = await client.get(url, headers=req_headers)
                 
+                # Combine headers from final response
                 headers = dict(response.headers)
                 response_time_ms = int(response.elapsed.total_seconds() * 1000)
                 
