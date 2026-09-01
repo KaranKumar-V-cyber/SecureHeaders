@@ -81,7 +81,7 @@ class SecurityScore(BaseModel):
 
 class ReportRequest(BaseModel):
     """Request for generating a report."""
-    format: str = Field(..., regex="^(json|markdown|pdf)$")
+    format: str = Field(..., pattern="^(json|markdown|pdf)$")
 
 
 class ErrorResponse(BaseModel):

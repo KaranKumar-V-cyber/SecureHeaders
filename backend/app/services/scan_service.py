@@ -3,7 +3,7 @@
 import asyncio
 import httpx
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Tuple
 from urllib.parse import urlparse
 from sqlalchemy.orm import Session
@@ -102,7 +102,7 @@ class ScanService:
             scan.server_info = server_info if server_info != "Not exposed" else None
             scan.content_type = content_type
             scan.security_score = security_score
-            scan.completed_at = datetime.utcnow()
+            scan.completed_at = datetime.now(timezone.utc)
             
             # Convert to JSON-serializable format
             scan.response_headers = redacted_headers
@@ -137,13 +137,14 @@ class ScanService:
             return scan, None
         
         except Exception as e:
+            db.rollback()
             scan.status = "failed"
             scan.error_message = f"Unexpected error: {str(e)}"
             try:
                 db.add(scan)
                 db.commit()
-            except:
-                pass
+            except Exception:
+                db.rollback()
             return scan, str(e)
     
     @staticmethod

@@ -72,32 +72,32 @@ def analyze_csp(headers: Dict[str, str]) -> List[Finding]:
         ))
     
     # Check for missing important directives
-    important_directives = ["default-src", "script-src", "style-src", "img-src"]
-    missing = [d for d in important_directives if d not in directives]
-    
-    if missing:
-        findings.append(Finding(
-            id=str(uuid.uuid4()),
-            title="CSP Missing Important Directives",
-            severity="LOW",
-            category="Content Security",
-            description=f"The CSP header is missing important directives: {', '.join(missing)}",
-            evidence={"missing_directives": missing},
-            impact="Incomplete CSP policy may not provide full protection.",
-            remediation=f"Add missing directives. Use 'default-src' as a fallback: default-src 'self'",
-            reference="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy"
-        ))
+    if "default-src" not in directives:
+        important_directives = ["script-src", "style-src", "img-src"]
+        missing = [d for d in important_directives if d not in directives]
+        if missing:
+            findings.append(Finding(
+                id=str(uuid.uuid4()),
+                title="CSP Missing Important Directives",
+                severity="LOW",
+                category="Content Security",
+                description=f"The CSP header is missing 'default-src' and specific directives: {', '.join(missing)}",
+                evidence={"missing_directives": ["default-src"] + missing},
+                impact="Incomplete CSP policy may not provide full protection.",
+                remediation="Add 'default-src' fallback directive: default-src 'self'",
+                reference="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy"
+            ))
     
     # Check for overly permissive default-src
     if "default-src" in directives:
         default_src = directives["default-src"].lower()
-        if "*" in default_src or default_src == "'none'":
+        if "*" in default_src:
             findings.append(Finding(
                 id=str(uuid.uuid4()),
                 title="Overly Permissive CSP default-src",
                 severity="MEDIUM",
                 category="Content Security",
-                description="The CSP default-src directive is overly permissive or uses wildcard.",
+                description="The CSP default-src directive is overly permissive or uses wildcard '*'.",
                 evidence={"default_src": directives["default-src"]},
                 impact="Reduces CSP effectiveness in preventing resource injection attacks.",
                 remediation="Restrict default-src to specific trusted sources: default-src 'self'",

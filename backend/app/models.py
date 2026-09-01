@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Float, Text
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
@@ -15,7 +15,7 @@ class Scan(Base):
     final_url = Column(String, nullable=True)
     status = Column(String, default="pending")  # pending, completed, failed
     security_score = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     completed_at = Column(DateTime, nullable=True)
     
     # Response Information

@@ -48,7 +48,7 @@ def analyze_permissions_policy(headers: Dict[str, str]) -> List[Finding]:
     for directive, description in dangerous_directives.items():
         if directive in directives:
             value = directives[directive].lower()
-            if value == "*" or value == "'*'" or "http" in value:
+            if value == "*" or value == "'*'" or value == "(*)" or value == "('*')" or "http" in value:
                 severity = "HIGH" if directive in ("camera", "microphone", "geolocation") else "MEDIUM"
                 findings.append(Finding(
                     id=str(uuid.uuid4()),
@@ -89,15 +89,17 @@ def _get_header(headers: Dict[str, str], name: str) -> Optional[str]:
 
 
 def _parse_policy(policy_string: str) -> Dict[str, str]:
-    """Parse Permissions-Policy header."""
+    """Parse Permissions-Policy or Feature-Policy header into directives."""
     directives = {}
-    
-    # Simple parser for policy directives
-    parts = policy_string.split(";")
+    import re
+    # Split by comma or semicolon
+    parts = [p.strip() for p in re.split(r"[,;]", policy_string) if p.strip()]
     for part in parts:
-        part = part.strip()
         if "=" in part:
             directive, value = part.split("=", 1)
+            directives[directive.strip().lower()] = value.strip()
+        elif " " in part:
+            directive, value = part.split(" ", 1)
             directives[directive.strip().lower()] = value.strip()
         else:
             directives[part.lower()] = ""

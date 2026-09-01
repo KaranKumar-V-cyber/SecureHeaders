@@ -1,9 +1,10 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings from environment variables."""
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
     
     # Database
     database_url: str = "sqlite:///./scan_history.db"
@@ -34,10 +35,6 @@ class Settings(BaseSettings):
     
     # Logging
     log_level: str = "INFO"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 settings = Settings()

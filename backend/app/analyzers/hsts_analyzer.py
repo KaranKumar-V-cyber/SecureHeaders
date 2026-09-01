@@ -78,7 +78,7 @@ def analyze_hsts(headers: Dict[str, str]) -> List[Finding]:
         return findings
     
     # Check for includeSubDomains
-    if not directives.get("includesubdomains"):
+    if "includesubdomains" not in directives:
         findings.append(Finding(
             id=str(uuid.uuid4()),
             title="HSTS Missing includeSubDomains",
@@ -92,7 +92,7 @@ def analyze_hsts(headers: Dict[str, str]) -> List[Finding]:
         ))
     
     # Check for preload
-    if not directives.get("preload"):
+    if "preload" not in directives:
         findings.append(Finding(
             id=str(uuid.uuid4()),
             title="HSTS Preload Not Enabled",

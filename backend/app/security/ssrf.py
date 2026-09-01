@@ -43,18 +43,26 @@ class SSRFValidator:
         Returns:
             tuple: (is_safe, error_message)
         """
-        # Normalize URL
-        if not url.startswith(("http://", "https://")):
+        # Parse URL and validate scheme
+        if "://" in url:
+            try:
+                parsed = urlparse(url)
+            except Exception as e:
+                return False, f"Invalid URL: {str(e)}"
+            
+            # Only allow HTTP and HTTPS
+            if parsed.scheme not in ("http", "https"):
+                return False, "Only HTTP and HTTPS schemes are allowed"
+        else:
+            # Normalize schemeless URL
             url = f"https://{url}"
-        
-        try:
-            parsed = urlparse(url)
-        except Exception as e:
-            return False, f"Invalid URL: {str(e)}"
-        
-        # Only allow HTTP and HTTPS
-        if parsed.scheme not in ("http", "https"):
-            return False, "Only HTTP and HTTPS schemes are allowed"
+            try:
+                parsed = urlparse(url)
+            except Exception as e:
+                return False, f"Invalid URL: {str(e)}"
+            
+            if parsed.scheme not in ("http", "https"):
+                return False, "Only HTTP and HTTPS schemes are allowed"
         
         # Extract hostname
         hostname = parsed.hostname
