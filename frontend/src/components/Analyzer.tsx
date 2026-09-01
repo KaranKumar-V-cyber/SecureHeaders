@@ -1,14 +1,19 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
-import { AlertCircle, CheckCircle, Loader } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader, Terminal, Globe, Clock, ShieldCheck } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface AnalysisResult {
   scan_id: string
   target: string
+  final_url?: string
   status: string
   security_score: number
+  http_status?: number
+  response_time_ms?: number
+  server_info?: string
+  response_headers: Record<string, string>
   findings: any[]
   severity_counts: Record<string, number>
 }
@@ -19,6 +24,7 @@ export default function Analyzer() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'findings' | 'headers'>('findings')
 
   const handleAnalyze = async () => {
     if (!url) {
@@ -58,11 +64,10 @@ export default function Analyzer() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">Website Analyzer</h1>
-        <p className="text-slate-400">Analyze HTTP security headers of any website</p>
+        <h1 className="text-4xl font-bold mb-2">Live Website Analyzer</h1>
+        <p className="text-slate-400">Perform real-time HTTP security header analysis on live websites</p>
       </div>
 
-      {/* Input Section */}
       <div className="card mb-8">
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">Target URL</label>
@@ -74,10 +79,9 @@ export default function Analyzer() {
             className="input"
             disabled={loading}
           />
-          <p className="text-xs text-slate-500 mt-2">Example: https://example.com or example.com</p>
+          <p className="text-xs text-slate-500 mt-2">Example: https://google.com, https://github.com, or example.com</p>
         </div>
 
-        {/* Authorization Confirmation */}
         <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
           <label className="flex items-center cursor-pointer">
             <input
@@ -91,12 +95,8 @@ export default function Analyzer() {
               I confirm that I own this target or have explicit authorization to test it.
             </span>
           </label>
-          <p className="text-xs text-slate-500 mt-2 ml-7">
-            Unauthorized access to computer systems is illegal. Use this tool only on systems you own or have explicit permission to test.
-          </p>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-900/30 border border-red-800 rounded-lg flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -104,7 +104,6 @@ export default function Analyzer() {
           </div>
         )}
 
-        {/* Action Buttons */}
         <div className="flex gap-3">
           <button
             onClick={handleAnalyze}
@@ -114,10 +113,10 @@ export default function Analyzer() {
             {loading ? (
               <>
                 <Loader className="w-4 h-4 mr-2 animate-spin inline" />
-                Analyzing...
+                Analyzing Live Target...
               </>
             ) : (
-              'Analyze'
+              'Analyze Now'
             )}
           </button>
           <button
@@ -130,45 +129,87 @@ export default function Analyzer() {
         </div>
       </div>
 
-      {/* Results */}
       {result && (
         <div className="space-y-6">
-          {/* Overview Card */}
           <div className="card">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <p className="text-slate-400 text-sm">Target</p>
-                <p className="text-xl font-mono">{result.target}</p>
+                <p className="text-slate-400 text-xs">Target & Final URL</p>
+                <p className="text-xl font-mono font-bold text-slate-100">{result.target}</p>
+                {result.final_url && result.final_url !== result.target && (
+                  <p className="text-xs text-blue-400 font-mono mt-1">↳ Resolved: {result.final_url}</p>
+                )}
               </div>
               <ScoreIndicator score={result.security_score} />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-800">
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-800 text-sm">
               <div>
-                <p className="text-slate-400 text-xs">Status</p>
-                <p className="font-semibold capitalize">{result.status}</p>
+                <p className="text-slate-400 text-xs">HTTP Status</p>
+                <p className="font-semibold">{result.http_status || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">Critical Findings</p>
-                <p className="font-semibold text-red-400">{result.severity_counts.CRITICAL}</p>
+                <p className="text-slate-400 text-xs">Response Time</p>
+                <p className="font-semibold">{result.response_time_ms ? `${result.response_time_ms}ms` : 'N/A'}</p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">High Findings</p>
-                <p className="font-semibold text-orange-400">{result.severity_counts.HIGH}</p>
+                <p className="text-slate-400 text-xs">Server Banner</p>
+                <p className="font-semibold">{result.server_info || 'Hidden / Redacted'}</p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">Medium Findings</p>
-                <p className="font-semibold text-yellow-400">{result.severity_counts.MEDIUM}</p>
+                <p className="text-slate-400 text-xs">Total Findings</p>
+                <p className="font-semibold">{result.findings.length}</p>
               </div>
             </div>
           </div>
 
-          {/* Findings List */}
-          {result.findings.length > 0 && (
-            <div className="card">
-              <h2 className="text-2xl font-bold mb-6">Security Findings</h2>
-              <div className="space-y-4">
-                {result.findings.map((finding, idx) => (
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-slate-800 gap-6">
+            <button
+              onClick={() => setActiveTab('findings')}
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+                activeTab === 'findings' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Security Findings ({result.findings.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('headers')}
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'headers' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Terminal className="w-4 h-4" /> Live Raw Headers ({Object.keys(result.response_headers || {}).length})
+            </button>
+          </div>
+
+          {activeTab === 'findings' ? (
+            <div className="space-y-4">
+              {result.findings.length === 0 ? (
+                <div className="card text-center py-8 text-slate-400">
+                  <ShieldCheck className="w-10 h-10 mx-auto mb-2 text-green-400" />
+                  <p className="font-medium">No security issues detected!</p>
+                </div>
+              ) : (
+                result.findings.map((finding, idx) => (
                   <FindingCard key={idx} finding={finding} />
+                ))
+              )}
+            </div>
+          ) : (
+            <div className="card">
+              <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+                <Terminal className="w-5 h-5 text-blue-400" /> Actual HTTP Headers Received
+              </h3>
+              <p className="text-xs text-slate-400 mb-4">
+                These are the authentic response headers fetched directly from the target server:
+              </p>
+              <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-xs overflow-x-auto space-y-1.5">
+                {Object.entries(result.response_headers || {}).map(([k, v]) => (
+                  <div key={k} className="flex gap-2">
+                    <span className="text-blue-400 font-semibold">{k}:</span>
+                    <span className="text-slate-300 break-all">{v}</span>
+                  </div>
                 ))}
               </div>
             </div>
@@ -189,7 +230,7 @@ function ScoreIndicator({ score }: { score: number }) {
 
   return (
     <div className={`text-center ${getColor(score)}`}>
-      <p className="text-sm text-slate-400">Security Score</p>
+      <p className="text-xs text-slate-400">Security Score</p>
       <p className="text-4xl font-bold">{score}</p>
       <p className="text-xs text-slate-400">/100</p>
     </div>
